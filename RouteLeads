@@ -40,7 +40,7 @@ trigger RouteLeads on Lead (After update) {
     if (leadChange.keySet().isEmpty() == false){ 
         
         for (ID idVal : leadChange.keySet()) {
-            MapUtil.mapUpdate(routerQueue, idVal, MapUtil.getLeads(leadChange, idVal)), 'add');
+            MapUtil.mapUpdate(routerQueue, idVal, OwnerUtil.getLeads(leadChange, idVal)), 'add');
         }
     
         LeadUtil.changeOwner(routerQueue);
