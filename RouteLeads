@@ -1,7 +1,5 @@
 trigger RouteLeads on Lead (After update) {
 
-    Map<ID, Set<ID>> oldLeads = new Map<ID, Set<ID>>();
-
     Map<ID, Integer> leadChange = new Map<ID, Integer>();
 
     Map<ID, Set<Lead>> routerQueue = new Map<ID, Set<Lead>>();
