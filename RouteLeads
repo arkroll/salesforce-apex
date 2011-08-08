@@ -1,86 +1,72 @@
 trigger RouteLeads on Lead (After update) {
 
-    Map<ID, Set<ID>> oldLeads = new Map<ID, Set<ID>>();
+    Map<ID, Integer> leadChange = new Map<ID, Integer>();
+
+    Map<ID, Set<Lead>> routerQueue = new Map<ID, Set<Lead>>();
+
+    Set<Lead> assignQueue = new Set<Lead>();
 
     for (Lead lead : Trigger.new) {
-        
-        System.debug('first FOR');
-        
-        String newOwnerId = lead.OwnerID;
-    
-        String oldOwnerId = Trigger.oldMap.get(lead.Id).OwnerId;
-        
-        Boolean rTR = False;
-        
-        List<CampaignMember> cM = [SELECT Id, CampaignId FROM CampaignMember WHERE Id = :lead.Id];
-        
-        while (rTR == False){
-         
-            for (CampaignMember aM : cM) {
-          
-                for (Campaign c : [SELECT Id, route_to_rep_yn__c FROM Campaign WHERE Id = :aM.CampaignId]) {
                 
-                    rTR = c.route_to_rep_yn__c;
-                }
+        String newOwnerId = lead.OwnerId;
+        System.debug(newOwnerId);
+        String oldOwnerId = Trigger.oldMap.get(lead.Id).OwnerId;
+        System.debug(oldOwnerId);
+        
+        if(LeadUtil.getRTR(lead) && LeadUtil.isInQueue(lead) && LeadAssignUtil.firstTime == True){
+            System.debug(lead.Name + 'Qualifies');
+            User rep = [SELECT Id FROM User WHERE Id = :lead.repGrp__c];
+            if(LeadUtil.routeBy(lead) == 'Route Randomly'){
+                MapUtil.mapUpdate(routerQueue, rep.Id, lead, 'add');
+                MapUtil.mapUpdate(leadChange, rep.Id, 1, '$inc');
+            }
+            else if(LeadUtil.routeBy(lead) == 'Use Default Assignment Rule'){
+                assignQueue.add(lead);
+            }
+            else if(LeadUtil.routeBy(lead) == 'Assign to Campaign Owner'){
+                LeadUtil.changeOwner(lead, LeadUtil.campaignOwner(lead));
+                MapUtil.mapUpdate(leadChange, LeadUtil.campaignOwner(lead), 1, '$inc');
             }
         }
-    
-         if (
-             (((lead.OwnerId != Trigger.oldMap.get(lead.Id).OwnerId) && ((lead.OwnerId == '00GA0000002FEzJ') || (lead.OwnerId == '00GA0000000YKi3') || (newOwnerId.startsWith('005A') && oldOwnerId.startsWith('005A')))
-             ) || 
-             ((newOwnerId == oldOwnerId) && lead.ISConverted == True)
-             ) && 
-             LeadAssignRuleUtil.firstTime == true) {
-            
-            System.debug(lead.Name + 'qualifies');
-            System.debug('oldLead Map existing values for OwnerId' + oldLeads.get(Trigger.oldMap.get(lead.Id).OwnerId));
-            if (oldLeads.get(Trigger.oldMap.get(lead.Id).OwnerId) == null) {
-                oldLeads.put(Trigger.oldMap.get(lead.Id).OwnerId, new Set<ID>{lead.OwnerId});
-                System.debug('oldLead Map: first put' + oldLeads.get(Trigger.oldMap.get(lead.Id).OwnerId));
-            }
-            else{
-                (oldLeads.get(Trigger.oldMap.get(lead.Id).OwnerId)).add(lead.OwnerId);
-            }
-            
-            System.debug('oldLead Map: set values for OwnerID ' + Trigger.oldMap.get(lead.Id).OwnerId  + oldLeads.get(Trigger.oldMap.get(lead.Id).OwnerId));        
+        else if((LeadUtil.mvRepToRep(oldOwnerId, newOwnerId) || LeadUtil.mvToQueue(oldOwnerId, newOwnerId) || Lead.ISConverted) && LeadAssignUtil.firstTime == True){
+            String name = lead.Name;
+            System.debug(lead.name + 'Qualifies');
+            MapUtil.mapUpdate(leadChange, Trigger.oldMap.get(lead.Id).OwnerId, -1, '$inc');
         }
         else{
-        System.debug(lead.Name + 'does not qualify' + ', old Owner Id: ' + oldOwnerId + ', new Owner Id: ' + newOwnerId);
+            System.debug(lead.Name + 'does not qualify');
         }
     }
-    if (oldLeads.keySet().isEmpty() == false){ 
+
+    if (leadChange.keySet().isEmpty() == false){
         
-        for (ID idVal : oldLeads.keySet()) {
-            
-            String sId = idVal;
-            
-            sID = sID.substring(0,15);
-            
-            Integer numLeads = oldLeads.get(idVal).size();
-            
-            System.debug('Old Lead Owner Id: ' + sID + ', Num Leads to Be Assigned: ' + numLeads);
-      
-            List<Lead> newLeads = [SELECT Id, OwnerId, mkto_si__Priority__c, mkto2__Lead_Score__c FROM Lead WHERE repGrp__c = :sId AND OwnerId = '00GA0000000Y0Ep' AND mkto_si__Priority__c != null AND mkto2__Lead_Score__c !=null ORDER BY mkto_si__Priority__c, mkto2__Lead_Score__c DESC LIMIT :numLeads];
-           
-            for (Lead oLead : newLeads){
-            
-                System.debug('new Leads ' + oLead.OwnerId + ', Priority Score: ' + oLead.mkto_si__Priority__c + ', Lead Score: ' + oLead.mkto2__Lead_Score__c);
+        for (ID idVal : leadChange.keySet()) {
+            User owner = [SELECT Id, Routing__c FROM User WHERE Id = :idVal];
+            if (owner.Routing__c == 'Route Randomly'){
+                MapUtil.mapUpdate(routerQueue, idVal, OwnerUtil.getLeads(leadChange, idVal), 'add');
             }
-            
-            Database.DMLOptions dmo = new Database.DMLOptions();
-            
-            dmo.assignmentRuleHeader.useDefaultRule= true;
-            
-            for (Lead aLead : newLeads){
-            
-                System.debug(aLead.Id);
-            
-                aLead.setOptions(dmo);
-            }
-            LeadAssignRuleUtil.firstTime = false;
-            
-            Database.Update(newLeads);
         }
+         
+        System.debug('routerQueue: ' + routerQueue + ' assignQueue: ' + assignQueue);
+        
+        Set<Lead> newLeads = new Set<Lead>();
+        for (Lead aLead : LeadUtil.changeOwner(routerQueue)){
+            newLeads.add(aLead);
+        }
+        for (Lead aLead : LeadUtil.runRules(assignQueue)){
+            newLeads.add(aLead);
+        }
+        
+        List<Lead> newLeadsList = new List<Lead>();
+        
+        for (Lead aLead : newLeads){
+            newLeadsList.add(aLead);
+        }
+
+        LeadAssignUtil.firstTime = false;
+            
+        Database.Update(newLeadsList);
+
     }
         
 }
