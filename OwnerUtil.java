@@ -1,6 +1,10 @@
 public class OwnerUtil{
     public static Set<Lead> getLeads(Map<ID, Integer> m, ID id) {
         Set<Lead> leads = new Set<Lead>();
+		if (id.size() > 15){
+			String _id = id;
+			id = _id.subsring(0,15);
+		}
         Integer ownedLeads = [SELECT Count() FROM Lead WHERE OwnerId = :id AND ISConverted = False];
         User u = [SELECT Queue_Size__c FROM User WHERE Id = :id];
         
