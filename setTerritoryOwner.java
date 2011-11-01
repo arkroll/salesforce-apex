@@ -12,7 +12,8 @@ trigger setTerritoryOwner on Lead (After update) {
                 for (User u : OwnerUtil.getTerritoryOwners(lead)){
                     oW.add(u);
                 }
-                User newOwner = oW[math.floor(math.random()*oW.size())];
+                Integer i = (math.floor(math.random()*oW.size())).intValue();
+                User newOwner = oW[i];
                 lead.territory_owner__c = newOwner.Id;
                 leads.add(lead);
             }
