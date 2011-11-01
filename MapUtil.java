@@ -1,4 +1,3 @@
-
 public class MapUtil {
 
     public static Map<ID, Integer> mapUpdate(Map<ID, Integer> m, ID id, Integer i, String opt) {
@@ -11,11 +10,6 @@ public class MapUtil {
         }
         }
         return m;
-    }
-    
-    public static Map<ID, Set<Lead>> mapUpdate(Map<ID, Set<Lead>> m, ID id, Lead lead, String opt) {
-        newMap = mapUpdate(m, id, new Set<Lead>(lead), opt);
-		return newMap;
     }
     
     public static Map<Id, Set<Lead>> mapUpdate(Map<ID, Set<Lead>> m, ID id, Set<Lead> lead, String opt) {
@@ -31,6 +25,13 @@ public class MapUtil {
         }
         return m;
     }
+    
+    public static Map<ID, Set<Lead>> mapUpdate(Map<ID, Set<Lead>> m, ID id, Lead lead, String opt) {
+        Map<Id, Set<Lead>> newMap = mapUpdate(m, id, new Set<Lead>{lead}, opt);
+        return newMap;
+    }
+    
+    
     
     
  }
